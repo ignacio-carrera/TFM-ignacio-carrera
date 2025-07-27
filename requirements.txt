@@ -1,0 +1,5 @@
+requests
+zeep
+pytest
+boto3
+streamlit

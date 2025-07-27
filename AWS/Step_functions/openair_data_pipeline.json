@@ -1,0 +1,101 @@
+{
+  "Comment": "Step Function with EMR Serverless job status polling for landing_to_raw and raw_to_std",
+  "StartAt": "Trigger landing_to_raw",
+  "States": {
+    "Trigger landing_to_raw": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-2:376465608000:function:trigger_emr_serverless",
+      "Parameters": {
+        "job_name": "landing_to_raw"
+      },
+      "ResultPath": "$.landingResult",
+      "Next": "Check landing_to_raw status"
+    },
+    "Check landing_to_raw status": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emrserverless:getJobRun",
+      "Parameters": {
+        "ApplicationId": "00ftnsk2oh53vd0d",
+        "JobRunId.$": "$.landingResult.JobRunId"
+      },
+      "ResultPath": "$.landingStatus",
+      "Next": "Landing job succeeded?"
+    },
+    "Landing job succeeded?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.landingStatus.JobRun.State",
+          "StringEquals": "SUCCESS",
+          "Next": "Trigger raw_to_std"
+        },
+        {
+          "Variable": "$.landingStatus.JobRun.State",
+          "StringEquals": "FAILED",
+          "Next": "Fail Landing"
+        }
+      ],
+      "Default": "Wait before rechecking landing"
+    },
+    "Wait before rechecking landing": {
+      "Type": "Wait",
+      "Seconds": 20,
+      "Next": "Check landing_to_raw status"
+    },
+    "Fail Landing": {
+      "Type": "Fail",
+      "Error": "LandingEMRJobFailed",
+      "Cause": "The landing_to_raw EMR Serverless job failed"
+    },
+    "Trigger raw_to_std": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-2:376465608000:function:trigger_emr_serverless",
+      "Parameters": {
+        "job_name": "raw_to_std"
+      },
+      "ResultPath": "$.rawResult",
+      "Next": "Check raw_to_std status"
+    },
+    "Check raw_to_std status": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:emrserverless:getJobRun",
+      "Parameters": {
+        "ApplicationId": "00ftnsk2oh53vd0d",
+        "JobRunId.$": "$.rawResult.JobRunId"
+      },
+      "ResultPath": "$.rawStatus",
+      "Next": "Raw job succeeded?"
+    },
+    "Raw job succeeded?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.rawStatus.JobRun.State",
+          "StringEquals": "SUCCESS",
+          "Next": "Run QA Consistency Check"
+        },
+        {
+          "Variable": "$.rawStatus.JobRun.State",
+          "StringEquals": "FAILED",
+          "Next": "Fail Raw"
+        }
+      ],
+      "Default": "Wait before rechecking raw"
+    },
+    "Wait before rechecking raw": {
+      "Type": "Wait",
+      "Seconds": 20,
+      "Next": "Check raw_to_std status"
+    },
+    "Fail Raw": {
+      "Type": "Fail",
+      "Error": "RawEMRJobFailed",
+      "Cause": "The raw_to_std EMR Serverless job failed"
+    },
+    "Run QA Consistency Check": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-2:376465608000:function:qa_consistency_check",
+      "End": true
+    }
+  }
+}
